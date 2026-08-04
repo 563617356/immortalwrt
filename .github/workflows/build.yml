@@ -1,4 +1,4 @@
-Name: Build ImmortalWrt
+name: Build ImmortalWrt
 
 on:
   repository_dispatch:
