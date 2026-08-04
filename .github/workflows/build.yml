@@ -1,4 +1,4 @@
-Name: Build ImmortalWrt
+name: Build ImmortalWrt
 
 on:
   repository_dispatch:
@@ -54,7 +54,6 @@ jobs:
         cd openwrt/bin/targets/*/*
         rm -rf packages
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
-        # 生成时间标签，方便发布时命名
         echo "RELEASE_TAG=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
 
     - name: Upload Firmware to Artifacts
@@ -63,7 +62,6 @@ jobs:
         name: ImmortalWrt_Firmware
         path: ${{ env.FIRMWARE }}/*
 
-    # ---------------- 新增：自动发布到 GitHub Releases ----------------
     - name: Upload Firmware to Release
       uses: softprops/action-gh-release@v2
       if: !cancelled()
