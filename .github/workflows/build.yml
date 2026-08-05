@@ -18,6 +18,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write # 给 Actions 创建 Release 的写入权限
 
     steps:
     - name: Checkout
@@ -78,22 +80,32 @@ jobs:
         make -j$(nproc) || make -j1 || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: Check space usage
-      if: always()
-      run: df -hT
-
-    - name: Organize files
+    - name: Organize firmware files
       id: organize
-      if: steps.compile.outputs.status == 'success' && always()
+      if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         cd openwrt/bin/targets/*/*
-        rm -rf packages
-        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        # 建立独立目录收集刷机固件，过滤无用的中间文件
+        mkdir -p bin_firmware
+        cp -f *bin *img.gz *tar.gz bin_firmware/ 2>/dev/null || true
+        # 移除包文件列表等杂物
+        rm -f bin_firmware/*manifest bin_firmware/sha256sums
+        
+        # 生成 Tag 和时间戳
+        echo "RELEASE_TAG=AX1800Pro-$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_ENV
+        echo "FIRMWARE_PATH=$PWD/bin_firmware" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: Upload firmware directory
-      uses: actions/upload-artifact@v3
-      if: steps.organize.outputs.status == 'success' && always()
+    - name: Upload firmware to Release
+      uses: softprops/action-gh-release@v1
+      if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
-        name: ImmortalWrt_AX1800Pro_firmware
-        path: ${{ env.FIRMWARE }}
+        tag_name: ${{ env.RELEASE_TAG }}
+        name: 京东云亚瑟 AX1800 Pro 固件 - ${{ env.RELEASE_TAG }}
+        body: |
+          ### 编译信息
+          * **适用设备**: 京东云亚瑟 (AX1800 Pro)
+          * **源码仓库**: ${{ env.REPO_URL }}
+          * **编译时间**: ${{ env.RELEASE_TAG }}
+        files: ${{ env.FIRMWARE_PATH }}/*
+        token: ${{ secrets.GITHUB_TOKEN }}
