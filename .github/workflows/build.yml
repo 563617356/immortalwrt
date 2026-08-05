@@ -1,8 +1,24 @@
-name: Build ImmortalWrt
+name: Build ImmortalWRT for JDCloud AX1800 Pro
 
 on:
-  repository_dispatch:
   workflow_dispatch:
+    inputs:
+      ssh:
+        description: 'SSH connection to Actions'
+        required: false
+        default: 'false'
+
+env:
+  REPO_URL: https://github.com/563617356/immortalwrt
+  REPO_BRANCH: main
+  FEEDS_CONF: feeds.conf.default
+  CONFIG_FILE: .config
+  DIY_P1_SH: diy-part1.sh
+  DIY_P2_SH: diy-part2.sh
+  UPLOAD_BIN_DIR: false
+  UPLOAD_FIRMWARE: true
+  UPLOAD_RELEASE: false
+  TZ: Asia/Shanghai
 
 jobs:
   build:
@@ -10,62 +26,79 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v3
 
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
         sudo -E apt-get -qq update
-        sudo -E apt-get -qq install ack antlr3 build-essential clang flex bison gawk gcc-multilib grep gettext git libssl-dev python3 rsync subversion texinfo liburiparser-dev device-tree-compiler upx-ucl unzip
+        sudo -E apt-get -qq install -y ack antlr3 bash bc bison build-essential ccache clang cmake cpm curl daemon debootstrap device-tree-compiler fastjar flex gawk gcc-multilib gettext git git-core java-propose-classpath gettext libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip python3-ply python3-docutils qemu-utils rsync subversion swig texinfo u-boot-tools unlink unzip vim wget xmlto xz-utils zlib1g-dev
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
 
-    - name: Download source code
+    - name: Clone source code
+      working-directory: /workdir
       run: |
-        git clone --depth 1 https://github.com/VIKINGYFY/immortalwrt.git openwrt
+        df -hT $PWD
+        git clone $REPO_URL -b $REPO_BRANCH openwrt
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
-    - name: Update & Install Feeds
+    - name: Update & Install feeds
       run: |
         cd openwrt
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Load Custom Configuration
+    - name: Generate `.config` for JDCloud AX1800 Pro (Yashu)
       run: |
-        [ -e .config ] && mv .config openwrt/.config
         cd openwrt
+        cat <<EOF > .config
+        CONFIG_TARGET_qualcommmax=y
+        CONFIG_TARGET_qualcommmax_ipq60xx=y
+        CONFIG_TARGET_qualcommmax_ipq60xx_DEVICE_jdcloud_ax1800-pro=y
+        CONFIG_PACKAGE_luci=y
+        CONFIG_LUCI_LANG_zh_Hans=y
+        EOF
         make defconfig
 
-    - name: Download Package
+    - name: Download package
+      id: package
       run: |
         cd openwrt
         make download -j8
-        find dl -size -1024k -exec rm -f {} \;
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -rf {} \;
 
-    - name: Compile Firmware
+    - name: Compile the firmware
+      id: compile
       run: |
         cd openwrt
-        make -j$(nproc) || make -j1 V=s
+        echo -e "$(nproc) thread compile"
+        make -j$(nproc) || make -j1 || make -j1 V=s
+        echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: Organize Files
+    - name: Check space usage
+      if: (!cancelled())
+      run: df -hT
+
+    - name: Organize files
+      id: organize
+      if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: Upload Firmware to Artifacts
-      uses: actions/upload-artifact@v4
+    - name: Upload firmware directory
+      uses: actions/upload-artifact@v3
+      if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
-        name: ImmortalWrt_Firmware
-        path: ${{ env.FIRMWARE }}/*
-
-    - name: Upload Firmware to Release
-      uses: softprops/action-gh-release@v2
-      if: !cancelled()
-      with:
-        tag_name: ImmortalWrt_Release
-        files: ${{ env.FIRMWARE }}/*
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        name: ImmortalWrt_AX1800Pro_firmware
+        path: ${{ env.FIRMWARE }}
