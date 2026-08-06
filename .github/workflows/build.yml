@@ -19,7 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     permissions:
-      contents: write # 给 Actions 创建 Release 的写入权限
+      contents: write
 
     steps:
     - name: Checkout
@@ -32,7 +32,7 @@ jobs:
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
         sudo docker image prune --all --force
         sudo -E apt-get -qq update
-        sudo -E apt-get -qq install -y ack antlr3 bash bc bison build-essential ccache clang cmake cpm curl daemon debootstrap device-tree-compiler fastjar flex gawk gcc-multilib gettext git git-core java-propose-classpath gettext libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip python3-ply python3-docutils qemu-utils rsync subversion swig texinfo u-boot-tools unlink unzip vim wget xmlto xz-utils zlib1g-dev
+        sudo -E apt-get -qq install -y ack antlr3 bash bc bison build-essential ccache clang cmake cpm curl daemon debootstrap device-tree-compiler fastjar flex gawk gcc-multilib gettext git git-core java-propose-classpath gettext libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip python3-ply python3-docutils qemu-utils rsync subversion swig texinfo u-boot-tools unzip vim wget xmlto xz-utils zlib1g-dev
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
@@ -52,7 +52,7 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Generate `.config` for JDCloud AX1800 Pro (Yashu)
+    - name: Generate .config for JDCloud AX1800 Pro (Yashu)
       run: |
         cd openwrt
         cat <<EOF > .config
@@ -85,13 +85,9 @@ jobs:
       if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         cd openwrt/bin/targets/*/*
-        # 建立独立目录收集刷机固件，过滤无用的中间文件
         mkdir -p bin_firmware
         cp -f *bin *img.gz *tar.gz bin_firmware/ 2>/dev/null || true
-        # 移除包文件列表等杂物
         rm -f bin_firmware/*manifest bin_firmware/sha256sums
-        
-        # 生成 Tag 和时间戳
         echo "RELEASE_TAG=AX1800Pro-$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_ENV
         echo "FIRMWARE_PATH=$PWD/bin_firmware" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
@@ -101,11 +97,11 @@ jobs:
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         tag_name: ${{ env.RELEASE_TAG }}
-        name: 京东云亚瑟 AX1800 Pro 固件 - ${{ env.RELEASE_TAG }}
+        name: AX1800 Pro Firmware - ${{ env.RELEASE_TAG }}
         body: |
-          ### 编译信息
-          * **适用设备**: 京东云亚瑟 (AX1800 Pro)
-          * **源码仓库**: ${{ env.REPO_URL }}
-          * **编译时间**: ${{ env.RELEASE_TAG }}
+          ### Build Info
+          * Device: JDCloud AX1800 Pro
+          * Source: ${{ env.REPO_URL }}
+          * Build Time: ${{ env.RELEASE_TAG }}
         files: ${{ env.FIRMWARE_PATH }}/*
         token: ${{ secrets.GITHUB_TOKEN }}
